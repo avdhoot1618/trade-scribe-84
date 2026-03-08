@@ -16,6 +16,7 @@ interface StockMeta {
 const STOCKS: StockMeta[] = [
   { symbol: '^BSESN', gfSymbol: 'SENSEX:INDEXBOM', name: 'SENSEX', exchange: 'BSE', isIndex: true },
   { symbol: '^NSEI', gfSymbol: 'NIFTY_50:INDEXNSE', name: 'NIFTY 50', exchange: 'NSE', isIndex: true },
+  { symbol: '^NSEBANK', gfSymbol: 'NIFTY_BANK:INDEXNSE', name: 'BANK NIFTY', exchange: 'NSE', isIndex: true },
   { symbol: 'RELIANCE.NS', gfSymbol: 'RELIANCE:NSE', name: 'Reliance Industries', isIndex: false },
   { symbol: 'TCS.NS', gfSymbol: 'TCS:NSE', name: 'TCS', isIndex: false },
   { symbol: 'HDFCBANK.NS', gfSymbol: 'HDFCBANK:NSE', name: 'HDFC Bank', isIndex: false },
