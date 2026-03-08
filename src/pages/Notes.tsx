@@ -1,19 +1,34 @@
+import { useState, useEffect } from 'react';
 import { formatTradeDate } from '@/lib/calculations';
+import { supabase } from '@/integrations/supabase/client';
+import { Skeleton } from '@/components/ui/skeleton';
 import { MOODS } from '@/types/trade';
-
-const mockNotes = [
-  { id: '1', date: '2026-03-07', instrument: 'NIFTY 50', mood: 'Confident', notes: 'Strong uptrend day. Followed the plan perfectly — entered on pullback to VWAP and exited at resistance. Market sentiment was clearly bullish with FII buying supporting the move.' },
-  { id: '2', date: '2026-03-06', instrument: 'RELIANCE', mood: 'Frustrated', notes: 'Broke my own stop loss rule. Moved SL lower hoping for recovery — classic mistake. Need to accept that losses are part of the game. Should have stuck to the original plan.' },
-  { id: '3', date: '2026-03-05', instrument: 'BANKNIFTY', mood: 'Disciplined', notes: 'Volatile session but managed risk well. Took only planned entries and let the market come to me. Profit came from patience, not prediction.' },
-  { id: '4', date: '2026-03-04', instrument: 'TCS', mood: 'Anxious', notes: 'Market was flat and choppy. Should have recognized the conditions and stayed out. Lost small but the real cost was mental energy spent on a low-probability setup.' },
-  { id: '5', date: '2026-03-03', instrument: 'HDFC BANK', mood: 'Confident', notes: 'Good entry at support level. However, exited too early — took 50% of the move instead of letting the winner run. Need to work on exit strategy.' },
-];
 
 function getMoodEmoji(mood: string): string {
   return MOODS.find(m => m.value === mood)?.emoji || '😐';
 }
 
 export default function Notes() {
+  const [notes, setNotes] = useState<{ id: string; trade_date: string; instrument: string; mood: string | null; notes: string | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
+
+      const { data } = await supabase
+        .from('trade_entries')
+        .select('id, trade_date, instrument, mood, notes')
+        .eq('user_id', user.id)
+        .not('notes', 'is', null)
+        .order('trade_date', { ascending: false });
+
+      setNotes(data ?? []);
+      setLoading(false);
+    })();
+  }, []);
+
   return (
     <div className="space-y-6">
       <div>
@@ -22,18 +37,24 @@ export default function Notes() {
       </div>
 
       <div className="space-y-4">
-        {mockNotes.map(note => (
-          <div key={note.id} className="glass-card p-5 animate-fade-in">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-xs text-muted-foreground">{formatTradeDate(note.date)}</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-secondary">{note.instrument}</span>
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)
+        ) : notes.length === 0 ? (
+          <p className="text-muted-foreground text-sm text-center py-12">No notes yet. Add notes when logging trades!</p>
+        ) : (
+          notes.map(note => (
+            <div key={note.id} className="glass-card p-5 animate-fade-in">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs text-muted-foreground">{formatTradeDate(note.trade_date)}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-secondary">{note.instrument}</span>
+                </div>
+                <span className="text-xl" title={note.mood ?? ''}>{getMoodEmoji(note.mood ?? '')}</span>
               </div>
-              <span className="text-xl" title={note.mood}>{getMoodEmoji(note.mood)}</span>
+              <p className="text-sm leading-relaxed text-foreground/80">{note.notes}</p>
             </div>
-            <p className="text-sm leading-relaxed text-foreground/80">{note.notes}</p>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
