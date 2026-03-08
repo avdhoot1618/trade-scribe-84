@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 import { X, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,9 +35,65 @@ export default function TradeEntryForm({ onClose }: { onClose: () => void }) {
   const netPnl = useMemo(() => calculateNetPnl(grossPnl, brokerage), [grossPnl, brokerage]);
   const tradeDay = useMemo(() => getDayFromDate(tradeDate), [tradeDate]);
 
-  const handleSave = () => {
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async (isDraft = false) => {
     if (!instrument) { toast.error('Instrument is required'); return; }
-    toast.success('Trade entry saved!');
+    setSaving(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast.error('You must be logged in'); setSaving(false); return; }
+
+    const tradeData = {
+      user_id: user.id,
+      trade_date: tradeDate,
+      trade_day: tradeDay,
+      session,
+      instrument,
+      trade_type: tradeType,
+      sentiment,
+      entry_price: entryPrice || null,
+      exit_price: exitPrice || null,
+      target_quantity: targetQty || null,
+      executed_quantity: executedQty || null,
+      stop_loss: stopLoss || null,
+      target_price: targetPrice || null,
+      gross_pnl: grossPnl,
+      brokerage: brokerage || 0,
+      net_pnl: netPnl,
+      mood: mood || null,
+      notes: notes || null,
+      is_draft: isDraft,
+    };
+
+    const { data: insertedTrade, error } = await supabase
+      .from('trade_entries')
+      .insert(tradeData)
+      .select()
+      .single();
+
+    if (error) {
+      toast.error('Failed to save trade: ' + error.message);
+      setSaving(false);
+      return;
+    }
+
+    // Save violations if any
+    if (violations.length > 0 && insertedTrade) {
+      const violationRows = violations.map(v => ({
+        user_id: user.id,
+        trade_entry_id: insertedTrade.id,
+        violation_type: v,
+        severity,
+        violation_notes: violationNotes || null,
+        violation_date: tradeDate,
+      }));
+      const { error: vError } = await supabase.from('violations').insert(violationRows);
+      if (vError) toast.error('Trade saved but violations failed: ' + vError.message);
+    }
+
+    toast.success(isDraft ? 'Saved as draft!' : 'Trade entry saved!');
+    setSaving(false);
     onClose();
   };
 
@@ -211,9 +268,9 @@ export default function TradeEntryForm({ onClose }: { onClose: () => void }) {
 
       {/* Actions */}
       <div className="flex gap-3 justify-end pt-2 border-t border-border/50">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button variant="secondary" onClick={() => { toast.info('Saved as draft'); onClose(); }}>Save as Draft</Button>
-        <Button onClick={handleSave}>Save Entry</Button>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="secondary" onClick={() => handleSave(true)} disabled={saving}>Save as Draft</Button>
+        <Button onClick={() => handleSave(false)} disabled={saving}>{saving ? 'Saving...' : 'Save Entry'}</Button>
       </div>
     </div>
   );
