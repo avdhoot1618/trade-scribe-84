@@ -14,7 +14,149 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      trade_entries: {
+        Row: {
+          brokerage: number | null
+          created_at: string | null
+          entry_price: number | null
+          executed_quantity: number | null
+          exit_price: number | null
+          gross_pnl: number | null
+          id: string
+          instrument: string
+          is_draft: boolean | null
+          mood: string | null
+          net_pnl: number | null
+          notes: string | null
+          sentiment: string | null
+          session: string | null
+          stop_loss: number | null
+          target_price: number | null
+          target_quantity: number | null
+          trade_date: string
+          trade_day: string | null
+          trade_type: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          brokerage?: number | null
+          created_at?: string | null
+          entry_price?: number | null
+          executed_quantity?: number | null
+          exit_price?: number | null
+          gross_pnl?: number | null
+          id?: string
+          instrument: string
+          is_draft?: boolean | null
+          mood?: string | null
+          net_pnl?: number | null
+          notes?: string | null
+          sentiment?: string | null
+          session?: string | null
+          stop_loss?: number | null
+          target_price?: number | null
+          target_quantity?: number | null
+          trade_date: string
+          trade_day?: string | null
+          trade_type?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          brokerage?: number | null
+          created_at?: string | null
+          entry_price?: number | null
+          executed_quantity?: number | null
+          exit_price?: number | null
+          gross_pnl?: number | null
+          id?: string
+          instrument?: string
+          is_draft?: boolean | null
+          mood?: string | null
+          net_pnl?: number | null
+          notes?: string | null
+          sentiment?: string | null
+          session?: string | null
+          stop_loss?: number | null
+          target_price?: number | null
+          target_quantity?: number | null
+          trade_date?: string
+          trade_day?: string | null
+          trade_type?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          created_at: string | null
+          currency: string | null
+          default_brokerage: number | null
+          id: string
+          timezone: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          currency?: string | null
+          default_brokerage?: number | null
+          id?: string
+          timezone?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          currency?: string | null
+          default_brokerage?: number | null
+          id?: string
+          timezone?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      violations: {
+        Row: {
+          created_at: string | null
+          id: string
+          severity: string | null
+          trade_entry_id: string | null
+          user_id: string
+          violation_date: string | null
+          violation_notes: string | null
+          violation_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          severity?: string | null
+          trade_entry_id?: string | null
+          user_id: string
+          violation_date?: string | null
+          violation_notes?: string | null
+          violation_type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          severity?: string | null
+          trade_entry_id?: string | null
+          user_id?: string
+          violation_date?: string | null
+          violation_notes?: string | null
+          violation_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "violations_trade_entry_id_fkey"
+            columns: ["trade_entry_id"]
+            isOneToOne: false
+            referencedRelation: "trade_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
