@@ -5,53 +5,63 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Yahoo Finance symbols for Indian indices and stocks
-const SYMBOLS = {
-  indices: [
-    { symbol: '^BSESN', name: 'SENSEX', exchange: 'BSE' },
-    { symbol: '^NSEI', name: 'NIFTY 50', exchange: 'NSE' },
-  ],
-  stocks: [
-    { symbol: 'RELIANCE.NS', name: 'Reliance Industries' },
-    { symbol: 'TCS.NS', name: 'TCS' },
-    { symbol: 'HDFCBANK.NS', name: 'HDFC Bank' },
-    { symbol: 'INFY.NS', name: 'Infosys' },
-    { symbol: 'ICICIBANK.NS', name: 'ICICI Bank' },
-    { symbol: 'HINDUNILVR.NS', name: 'Hindustan Unilever' },
-    { symbol: 'ITC.NS', name: 'ITC' },
-    { symbol: 'SBIN.NS', name: 'SBI' },
-    { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel' },
-    { symbol: 'KOTAKBANK.NS', name: 'Kotak Mahindra Bank' },
-    { symbol: 'LT.NS', name: 'Larsen & Toubro' },
-    { symbol: 'AXISBANK.NS', name: 'Axis Bank' },
-    { symbol: 'WIPRO.NS', name: 'Wipro' },
-    { symbol: 'ADANIENT.NS', name: 'Adani Enterprises' },
-    { symbol: 'TATAMOTORS.NS', name: 'Tata Motors' },
-    { symbol: 'MARUTI.NS', name: 'Maruti Suzuki' },
-    { symbol: 'SUNPHARMA.NS', name: 'Sun Pharma' },
-    { symbol: 'TITAN.NS', name: 'Titan Company' },
-    { symbol: 'BAJFINANCE.NS', name: 'Bajaj Finance' },
-    { symbol: 'ASIANPAINT.NS', name: 'Asian Paints' },
-  ],
-};
+const SYMBOLS = [
+  { symbol: '^BSESN', name: 'SENSEX', exchange: 'BSE', isIndex: true },
+  { symbol: '^NSEI', name: 'NIFTY 50', exchange: 'NSE', isIndex: true },
+  { symbol: 'RELIANCE.NS', name: 'Reliance Industries', isIndex: false },
+  { symbol: 'TCS.NS', name: 'TCS', isIndex: false },
+  { symbol: 'HDFCBANK.NS', name: 'HDFC Bank', isIndex: false },
+  { symbol: 'INFY.NS', name: 'Infosys', isIndex: false },
+  { symbol: 'ICICIBANK.NS', name: 'ICICI Bank', isIndex: false },
+  { symbol: 'HINDUNILVR.NS', name: 'Hindustan Unilever', isIndex: false },
+  { symbol: 'ITC.NS', name: 'ITC', isIndex: false },
+  { symbol: 'SBIN.NS', name: 'SBI', isIndex: false },
+  { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel', isIndex: false },
+  { symbol: 'KOTAKBANK.NS', name: 'Kotak Mahindra Bank', isIndex: false },
+  { symbol: 'LT.NS', name: 'Larsen & Toubro', isIndex: false },
+  { symbol: 'AXISBANK.NS', name: 'Axis Bank', isIndex: false },
+  { symbol: 'WIPRO.NS', name: 'Wipro', isIndex: false },
+  { symbol: 'ADANIENT.NS', name: 'Adani Enterprises', isIndex: false },
+  { symbol: 'TATAMOTORS.NS', name: 'Tata Motors', isIndex: false },
+  { symbol: 'MARUTI.NS', name: 'Maruti Suzuki', isIndex: false },
+  { symbol: 'SUNPHARMA.NS', name: 'Sun Pharma', isIndex: false },
+  { symbol: 'TITAN.NS', name: 'Titan Company', isIndex: false },
+  { symbol: 'BAJFINANCE.NS', name: 'Bajaj Finance', isIndex: false },
+  { symbol: 'ASIANPAINT.NS', name: 'Asian Paints', isIndex: false },
+];
 
-async function fetchYahooQuote(symbols: string[]) {
-  const joined = symbols.join(',');
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(joined)}`;
-  
+async function fetchQuote(sym: string) {
+  // Use v8 chart endpoint (no auth required)
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1d&includePrePost=false`;
   const resp = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    },
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
   });
-
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Yahoo Finance API error [${resp.status}]: ${text}`);
+    console.error(`Failed for ${sym}: ${resp.status} ${text}`);
+    return null;
   }
-
   const data = await resp.json();
-  return data.quoteResponse?.result || [];
+  const result = data?.chart?.result?.[0];
+  if (!result) return null;
+
+  const meta = result.meta;
+  const price = meta.regularMarketPrice;
+  const previousClose = meta.chartPreviousClose ?? meta.previousClose;
+  const change = price - previousClose;
+  const changePercent = previousClose ? (change / previousClose) * 100 : 0;
+
+  return {
+    symbol: sym,
+    price,
+    change,
+    changePercent,
+    previousClose,
+    dayHigh: meta.regularMarketDayHigh ?? meta.dayHigh ?? price,
+    dayLow: meta.regularMarketDayLow ?? meta.dayLow ?? price,
+    volume: meta.regularMarketVolume ?? 0,
+    marketState: meta.marketState ?? 'CLOSED',
+  };
 }
 
 serve(async (req) => {
@@ -60,51 +70,19 @@ serve(async (req) => {
   }
 
   try {
-    const allSymbols = [
-      ...SYMBOLS.indices.map(i => i.symbol),
-      ...SYMBOLS.stocks.map(s => s.symbol),
-    ];
+    // Fetch all in parallel
+    const results = await Promise.allSettled(SYMBOLS.map(s => fetchQuote(s.symbol)));
 
-    const quotes = await fetchYahooQuote(allSymbols);
+    const indices: any[] = [];
+    const stocks: any[] = [];
 
-    const indexSymbols = new Set(SYMBOLS.indices.map(i => i.symbol));
-    
-    const indices = quotes
-      .filter((q: any) => indexSymbols.has(q.symbol))
-      .map((q: any) => {
-        const meta = SYMBOLS.indices.find(i => i.symbol === q.symbol);
-        return {
-          symbol: q.symbol,
-          name: meta?.name || q.shortName,
-          exchange: meta?.exchange,
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange,
-          changePercent: q.regularMarketChangePercent,
-          previousClose: q.regularMarketPreviousClose,
-          dayHigh: q.regularMarketDayHigh,
-          dayLow: q.regularMarketDayLow,
-          marketState: q.marketState,
-        };
-      });
-
-    const stocks = quotes
-      .filter((q: any) => !indexSymbols.has(q.symbol))
-      .map((q: any) => {
-        const meta = SYMBOLS.stocks.find(s => s.symbol === q.symbol);
-        return {
-          symbol: q.symbol,
-          name: meta?.name || q.shortName,
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange,
-          changePercent: q.regularMarketChangePercent,
-          previousClose: q.regularMarketPreviousClose,
-          dayHigh: q.regularMarketDayHigh,
-          dayLow: q.regularMarketDayLow,
-          volume: q.regularMarketVolume,
-          marketCap: q.marketCap,
-          marketState: q.marketState,
-        };
-      });
+    results.forEach((r, i) => {
+      if (r.status !== 'fulfilled' || !r.value) return;
+      const meta = SYMBOLS[i];
+      const quote = { ...r.value, name: meta.name, exchange: meta.exchange };
+      if (meta.isIndex) indices.push(quote);
+      else stocks.push(quote);
+    });
 
     return new Response(JSON.stringify({ indices, stocks, fetchedAt: new Date().toISOString() }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
