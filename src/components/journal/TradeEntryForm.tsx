@@ -268,9 +268,9 @@ export default function TradeEntryForm({ onClose }: { onClose: () => void }) {
 
       {/* Actions */}
       <div className="flex gap-3 justify-end pt-2 border-t border-border/50">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button variant="secondary" onClick={() => { toast.info('Saved as draft'); onClose(); }}>Save as Draft</Button>
-        <Button onClick={handleSave}>Save Entry</Button>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="secondary" onClick={() => handleSave(true)} disabled={saving}>Save as Draft</Button>
+        <Button onClick={() => handleSave(false)} disabled={saving}>{saving ? 'Saving...' : 'Save Entry'}</Button>
       </div>
     </div>
   );
