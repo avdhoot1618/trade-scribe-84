@@ -5,53 +5,99 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Yahoo Finance symbols for Indian indices and stocks
-const SYMBOLS = {
-  indices: [
-    { symbol: '^BSESN', name: 'SENSEX', exchange: 'BSE' },
-    { symbol: '^NSEI', name: 'NIFTY 50', exchange: 'NSE' },
-  ],
-  stocks: [
-    { symbol: 'RELIANCE.NS', name: 'Reliance Industries' },
-    { symbol: 'TCS.NS', name: 'TCS' },
-    { symbol: 'HDFCBANK.NS', name: 'HDFC Bank' },
-    { symbol: 'INFY.NS', name: 'Infosys' },
-    { symbol: 'ICICIBANK.NS', name: 'ICICI Bank' },
-    { symbol: 'HINDUNILVR.NS', name: 'Hindustan Unilever' },
-    { symbol: 'ITC.NS', name: 'ITC' },
-    { symbol: 'SBIN.NS', name: 'SBI' },
-    { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel' },
-    { symbol: 'KOTAKBANK.NS', name: 'Kotak Mahindra Bank' },
-    { symbol: 'LT.NS', name: 'Larsen & Toubro' },
-    { symbol: 'AXISBANK.NS', name: 'Axis Bank' },
-    { symbol: 'WIPRO.NS', name: 'Wipro' },
-    { symbol: 'ADANIENT.NS', name: 'Adani Enterprises' },
-    { symbol: 'TATAMOTORS.NS', name: 'Tata Motors' },
-    { symbol: 'MARUTI.NS', name: 'Maruti Suzuki' },
-    { symbol: 'SUNPHARMA.NS', name: 'Sun Pharma' },
-    { symbol: 'TITAN.NS', name: 'Titan Company' },
-    { symbol: 'BAJFINANCE.NS', name: 'Bajaj Finance' },
-    { symbol: 'ASIANPAINT.NS', name: 'Asian Paints' },
-  ],
-};
+interface StockMeta {
+  symbol: string;
+  gfSymbol: string; // Google Finance symbol format e.g. "RELIANCE:NSE"
+  name: string;
+  exchange?: string;
+  isIndex: boolean;
+}
 
-async function fetchYahooQuote(symbols: string[]) {
-  const joined = symbols.join(',');
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(joined)}`;
-  
-  const resp = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    },
-  });
+const STOCKS: StockMeta[] = [
+  { symbol: '^BSESN', gfSymbol: 'SENSEX:INDEXBOM', name: 'SENSEX', exchange: 'BSE', isIndex: true },
+  { symbol: '^NSEI', gfSymbol: 'NIFTY_50:INDEXNSE', name: 'NIFTY 50', exchange: 'NSE', isIndex: true },
+  { symbol: 'RELIANCE.NS', gfSymbol: 'RELIANCE:NSE', name: 'Reliance Industries', isIndex: false },
+  { symbol: 'TCS.NS', gfSymbol: 'TCS:NSE', name: 'TCS', isIndex: false },
+  { symbol: 'HDFCBANK.NS', gfSymbol: 'HDFCBANK:NSE', name: 'HDFC Bank', isIndex: false },
+  { symbol: 'INFY.NS', gfSymbol: 'INFY:NSE', name: 'Infosys', isIndex: false },
+  { symbol: 'ICICIBANK.NS', gfSymbol: 'ICICIBANK:NSE', name: 'ICICI Bank', isIndex: false },
+  { symbol: 'HINDUNILVR.NS', gfSymbol: 'HINDUNILVR:NSE', name: 'Hindustan Unilever', isIndex: false },
+  { symbol: 'ITC.NS', gfSymbol: 'ITC:NSE', name: 'ITC', isIndex: false },
+  { symbol: 'SBIN.NS', gfSymbol: 'SBIN:NSE', name: 'SBI', isIndex: false },
+  { symbol: 'BHARTIARTL.NS', gfSymbol: 'BHARTIARTL:NSE', name: 'Bharti Airtel', isIndex: false },
+  { symbol: 'KOTAKBANK.NS', gfSymbol: 'KOTAKBANK:NSE', name: 'Kotak Mahindra Bank', isIndex: false },
+  { symbol: 'LT.NS', gfSymbol: 'LT:NSE', name: 'Larsen & Toubro', isIndex: false },
+  { symbol: 'AXISBANK.NS', gfSymbol: 'AXISBANK:NSE', name: 'Axis Bank', isIndex: false },
+  { symbol: 'WIPRO.NS', gfSymbol: 'WIPRO:NSE', name: 'Wipro', isIndex: false },
+  { symbol: 'ADANIENT.NS', gfSymbol: 'ADANIENT:NSE', name: 'Adani Enterprises', isIndex: false },
+  { symbol: 'TATAMOTORS.NS', gfSymbol: 'TATAMOTORS:NSE', name: 'Tata Motors', isIndex: false },
+  { symbol: 'MARUTI.NS', gfSymbol: 'MARUTI:NSE', name: 'Maruti Suzuki', isIndex: false },
+  { symbol: 'SUNPHARMA.NS', gfSymbol: 'SUNPHARMA:NSE', name: 'Sun Pharma', isIndex: false },
+  { symbol: 'TITAN.NS', gfSymbol: 'TITAN:NSE', name: 'Titan Company', isIndex: false },
+  { symbol: 'BAJFINANCE.NS', gfSymbol: 'BAJFINANCE:NSE', name: 'Bajaj Finance', isIndex: false },
+  { symbol: 'ASIANPAINT.NS', gfSymbol: 'ASIANPAINT:NSE', name: 'Asian Paints', isIndex: false },
+];
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Yahoo Finance API error [${resp.status}]: ${text}`);
+async function fetchGoogleFinanceQuote(meta: StockMeta) {
+  try {
+    const url = `https://www.google.com/finance/quote/${meta.gfSymbol}`;
+    const resp = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+
+    if (!resp.ok) {
+      console.error(`Google Finance ${meta.gfSymbol}: HTTP ${resp.status}`);
+      await resp.text();
+      return null;
+    }
+
+    const html = await resp.text();
+
+    // Extract current price from data-last-price attribute
+    const priceMatch = html.match(/data-last-price="([^"]+)"/);
+    const prevCloseMatch = html.match(/data-previous-close="([^"]+)"/);
+    
+    if (!priceMatch) {
+      console.error(`No price found for ${meta.gfSymbol}`);
+      return null;
+    }
+
+    const price = parseFloat(priceMatch[1]);
+    const previousClose = prevCloseMatch ? parseFloat(prevCloseMatch[1]) : price;
+    const change = price - previousClose;
+    const changePercent = previousClose ? (change / previousClose) * 100 : 0;
+
+    // Try to extract high/low
+    const highMatch = html.match(/data-.*?high.*?"([0-9,.]+)"/i);
+    const lowMatch = html.match(/data-.*?low.*?"([0-9,.]+)"/i);
+
+    // Extract volume if available
+    const volumeMatch = html.match(/data-.*?volume.*?"([0-9,.]+)"/i);
+
+    // Market state
+    const isMarketOpen = html.includes('Market open') || html.includes('data-market-state="open"');
+
+    return {
+      symbol: meta.symbol,
+      name: meta.name,
+      exchange: meta.exchange,
+      price,
+      change: Math.round(change * 100) / 100,
+      changePercent: Math.round(changePercent * 100) / 100,
+      previousClose,
+      dayHigh: highMatch ? parseFloat(highMatch[1].replace(/,/g, '')) : price,
+      dayLow: lowMatch ? parseFloat(lowMatch[1].replace(/,/g, '')) : price,
+      volume: volumeMatch ? parseInt(volumeMatch[1].replace(/,/g, '')) : 0,
+      marketState: isMarketOpen ? 'REGULAR' : 'CLOSED',
+    };
+  } catch (err) {
+    console.error(`Error fetching ${meta.gfSymbol}:`, err);
+    return null;
   }
-
-  const data = await resp.json();
-  return data.quoteResponse?.result || [];
 }
 
 serve(async (req) => {
@@ -60,51 +106,21 @@ serve(async (req) => {
   }
 
   try {
-    const allSymbols = [
-      ...SYMBOLS.indices.map(i => i.symbol),
-      ...SYMBOLS.stocks.map(s => s.symbol),
-    ];
-
-    const quotes = await fetchYahooQuote(allSymbols);
-
-    const indexSymbols = new Set(SYMBOLS.indices.map(i => i.symbol));
+    // Fetch all quotes in parallel (batches of 5 to avoid rate limiting)
+    const results: any[] = [];
     
-    const indices = quotes
-      .filter((q: any) => indexSymbols.has(q.symbol))
-      .map((q: any) => {
-        const meta = SYMBOLS.indices.find(i => i.symbol === q.symbol);
-        return {
-          symbol: q.symbol,
-          name: meta?.name || q.shortName,
-          exchange: meta?.exchange,
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange,
-          changePercent: q.regularMarketChangePercent,
-          previousClose: q.regularMarketPreviousClose,
-          dayHigh: q.regularMarketDayHigh,
-          dayLow: q.regularMarketDayLow,
-          marketState: q.marketState,
-        };
-      });
+    for (let i = 0; i < STOCKS.length; i += 5) {
+      const batch = STOCKS.slice(i, i + 5);
+      const batchResults = await Promise.allSettled(
+        batch.map(s => fetchGoogleFinanceQuote(s))
+      );
+      for (const r of batchResults) {
+        results.push(r.status === 'fulfilled' ? r.value : null);
+      }
+    }
 
-    const stocks = quotes
-      .filter((q: any) => !indexSymbols.has(q.symbol))
-      .map((q: any) => {
-        const meta = SYMBOLS.stocks.find(s => s.symbol === q.symbol);
-        return {
-          symbol: q.symbol,
-          name: meta?.name || q.shortName,
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange,
-          changePercent: q.regularMarketChangePercent,
-          previousClose: q.regularMarketPreviousClose,
-          dayHigh: q.regularMarketDayHigh,
-          dayLow: q.regularMarketDayLow,
-          volume: q.regularMarketVolume,
-          marketCap: q.marketCap,
-          marketState: q.marketState,
-        };
-      });
+    const indices = results.filter((r, i) => r && STOCKS[i].isIndex);
+    const stocks = results.filter((r, i) => r && !STOCKS[i].isIndex);
 
     return new Response(JSON.stringify({ indices, stocks, fetchedAt: new Date().toISOString() }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
