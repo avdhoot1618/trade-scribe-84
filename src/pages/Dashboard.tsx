@@ -7,7 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { TradeEntry } from '@/types/trade';
 
-function formatINR(value: number): string {
+function formatINR(value: number | null | undefined): string {
+  if (value == null) return '—';
   return '₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
