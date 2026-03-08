@@ -13,28 +13,43 @@ function getSeverityColor(severity: string) {
 
 export default function Violations() {
   const [violations, setViolations] = useState<Violation[]>([]);
+  const [dailyPnl, setDailyPnl] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
 
-  const fetchViolations = async () => {
+  const fetchData = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const { data, error } = await supabase
-      .from('violations')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('violation_date', { ascending: false });
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
 
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    const [vRes, tRes] = await Promise.all([
+      supabase.from('violations').select('*').eq('user_id', user.id).order('violation_date', { ascending: false }),
+      supabase.from('trade_entries').select('trade_date, net_pnl').eq('user_id', user.id).gte('trade_date', startDate).lte('trade_date', endDate),
+    ]);
+
+    if (vRes.error) {
+      toast({ title: 'Error', description: vRes.error.message, variant: 'destructive' });
     } else {
-      setViolations((data ?? []) as Violation[]);
+      setViolations((vRes.data ?? []) as Violation[]);
     }
+
+    // Aggregate daily P&L
+    const pnlMap: Record<number, number> = {};
+    (tRes.data ?? []).forEach((t: any) => {
+      const day = new Date(t.trade_date).getDate();
+      pnlMap[day] = (pnlMap[day] || 0) + (t.net_pnl ?? 0);
+    });
+    setDailyPnl(pnlMap);
+
     setLoading(false);
   };
 
-  useEffect(() => { fetchViolations(); }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('violations').delete().eq('id', id);
@@ -57,33 +72,19 @@ export default function Violations() {
 
   const maxCount = topViolations[0]?.count ?? 1;
 
-  const improvementScore = useMemo(() => {
-    if (violations.length === 0) return 100;
-    const highCount = violations.filter(v => v.severity === 'High').length;
-    const medCount = violations.filter(v => v.severity === 'Medium').length;
-    const lowCount = violations.filter(v => v.severity === 'Low').length;
-    const penalty = highCount * 10 + medCount * 5 + lowCount * 2;
-    return Math.max(0, Math.min(100, 100 - penalty));
-  }, [violations]);
-
   // Calendar data for current month
   const calendarData = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const violationDays = new Set(
-      violations
-        .filter(v => v.violation_date)
-        .map(v => new Date(v.violation_date).getDate())
-    );
     const today = now.getDate();
-    return Array.from({ length: daysInMonth }, (_, i) => ({
-      day: i + 1,
-      hasViolation: violationDays.has(i + 1),
-      isPast: i + 1 <= today,
-    }));
-  }, [violations]);
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const day = i + 1;
+      const pnl = dailyPnl[day];
+      return { day, pnl, isPast: day <= today };
+    });
+  }, [dailyPnl]);
 
   const monthLabel = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
@@ -94,8 +95,8 @@ export default function Violations() {
           <h1 className="font-heading text-2xl font-bold">Mistakes & Violations</h1>
           <p className="text-muted-foreground text-sm">Track discipline and build better habits</p>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-48" />)}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[1, 2].map(i => <Skeleton key={i} className="h-48" />)}
         </div>
         <Skeleton className="h-64" />
       </div>
@@ -109,28 +110,7 @@ export default function Violations() {
         <p className="text-muted-foreground text-sm">Track discipline and build better habits</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Improvement Score */}
-        <div className="glass-card p-6 flex flex-col items-center justify-center">
-          <h3 className="font-heading font-semibold mb-4">Improvement Score</h3>
-          <div className="relative w-32 h-32">
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-              <circle cx="60" cy="60" r="50" fill="none" stroke="hsl(var(--secondary))" strokeWidth="10" />
-              <circle
-                cx="60" cy="60" r="50" fill="none"
-                stroke={improvementScore >= 70 ? 'hsl(var(--profit))' : improvementScore >= 40 ? 'hsl(var(--primary))' : 'hsl(var(--loss))'}
-                strokeWidth="10"
-                strokeLinecap="round"
-                strokeDasharray={`${(improvementScore / 100) * 314} 314`}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="font-mono text-2xl font-bold">{improvementScore}</span>
-            </div>
-          </div>
-          <p className="text-muted-foreground text-xs mt-3 text-center">Lower violations = higher score</p>
-        </div>
-
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top 5 Violations */}
         <div className="glass-card p-5">
           <h3 className="font-heading font-semibold mb-4">Top 5 This Month</h3>
@@ -154,7 +134,7 @@ export default function Violations() {
           )}
         </div>
 
-        {/* Violation Calendar */}
+        {/* P&L Calendar */}
         <div className="glass-card p-5">
           <h3 className="font-heading font-semibold mb-4">{monthLabel}</h3>
           <div className="grid grid-cols-7 gap-1.5">
@@ -165,11 +145,13 @@ export default function Violations() {
               <div
                 key={d.day}
                 className={`aspect-square rounded-sm flex items-center justify-center text-xs font-mono ${
-                  d.hasViolation
+                  d.pnl != null && d.pnl > 0
+                    ? 'bg-profit/20 text-profit'
+                    : d.pnl != null && d.pnl < 0
                     ? 'bg-loss/20 text-loss'
                     : d.isPast
-                    ? 'bg-profit/10 text-profit/60'
-                    : 'bg-secondary/30 text-muted-foreground/30'
+                    ? 'bg-secondary/30 text-muted-foreground/50'
+                    : 'bg-secondary/10 text-muted-foreground/20'
                 }`}
               >
                 {d.day}
@@ -177,8 +159,9 @@ export default function Violations() {
             ))}
           </div>
           <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-loss/20" /> Violation</div>
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-profit/10" /> Clean</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-profit/20" /> Profit</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-loss/20" /> Loss</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-secondary/30" /> No trades</div>
           </div>
         </div>
       </div>
